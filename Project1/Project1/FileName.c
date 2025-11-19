@@ -1,14 +1,19 @@
 ﻿// slot_3x4_integrated_fx.c
 // gcc slot_3x4_integrated_fx.c -o slot && ./slot
 #define _CRT_SECURE_NO_WARNINGS
+#include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
-#include <windows.h>
 #include <mmsystem.h>
 #pragma comment(lib, "winmm.lib")
 #include <stdarg.h>   // ★ 가변 인자(va_list) 쓰기 위해 필요
+
+static void cursor_hide(void);
+static void cursor_show(void);
+static void screen_clear(void);
+static void gotoxy(int r, int c);
 
 #define ROWS 3
 #define COLS 4
@@ -40,7 +45,6 @@ int g_msg_row = 1;
 
 // ===== 콘솔 UI(중앙 정렬/커서/색/크기) =====
 #if defined(_WIN32)
-#include <windows.h>
 #include <conio.h>
 #else
 #include <sys/ioctl.h>
@@ -63,6 +67,34 @@ int g_msg_row = 1;
 #define ANSI_CLEAR   "\x1b[2J"
 #define ANSI_HOME    "\x1b[H"
 
+static void get_terminal_size(int* rows, int* cols);
+
+void gotoxyflash_hit_lines(int row, int col)
+{
+    const char* msg = "시작하려면 Enter를 누르세요";
+
+    for (int i = 0; i < 8; i++) {
+        if (i % 2 == 0) {
+            gotoxy(row, col);
+            printf(ANSI_YELLOW "%s" ANSI_RESET, msg);
+        }
+        else {
+            gotoxy(row, col);
+            printf("                               ");
+        }
+
+#if defined(_WIN32)
+        Sleep(350);
+#else
+        usleep(350000);
+#endif
+    }
+
+    gotoxy(row, col);
+    printf(ANSI_YELLOW "%s" ANSI_RESET, msg);
+}
+
+
 static void get_terminal_size(int* rows, int* cols) {
 #if defined(_WIN32)
     CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -75,7 +107,9 @@ static void get_terminal_size(int* rows, int* cols) {
     *rows = w.ws_row; *cols = w.ws_col;
 #endif
 }
-static void gotoxy(int r, int c) { printf("\x1b[%d;%dH", r, c); }
+static void gotoxy(int r, int c) {
+    printf("\x1b[%d;%dH", r, c);
+}
 static void enable_vt_mode(void) {
 #if defined(_WIN32)
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -272,7 +306,7 @@ static void spin_animation_frames(int board[ROWS][COLS], int weights[10], int fr
     int left = (termC - BW) / 2; if (left < 1) left = 1;
 
     for (int f = 0; f < frames; f++) {
-        int lock_col = (f * (COLS + 1)) / frames; // 왼→오 순서로 고정되는 느낌
+        int lock_col = (f * (COLS + 1)) / frames;
         int temp[ROWS][COLS];
         for (int r = 0; r < ROWS; r++) {
             for (int c = 0; c < COLS; c++) {
@@ -446,7 +480,7 @@ static void show_weights(const int* w) {
     puts("");
 }
 
-static void shop_menu(int* score, int* spins, int* weights, int* has444Protect) {
+static void shop_menu(int* score, int* spins, int* weights, int* num444Protect) {
     // 현재 가격을 유지하도록 static 변수 사용 (프로그램 실행 중 값 유지)
     static int cur_cost_spin_plus1 = COST_SPIN_PLUS1; // 5 -> 다음엔 +5 증가
     static int cur_cost_boost_1_4 = COST_BOOST_1_4;  // 20 -> 구매시 *2
@@ -557,8 +591,8 @@ static void shop_menu(int* score, int* spins, int* weights, int* has444Protect) 
             }
             else {
                 *score -= fixed_cost_444;
-                *has444Protect = 1;
-                sprintf(buf, "444 보호 부적 획득! (다음 444 1회 무효)  |  점수: %d", *score);
+                (*num444Protect)++;
+                sprintf(buf, "444 보호 부적 획득! (현재 남은 부적 %d개)  |  점수: %d", *num444Protect, *score);
                 print_centered(base + 15, buf);
             }
         }
@@ -695,21 +729,28 @@ int main(void) {
     for (int n = 0; n < 10; n++) weights[n] = WEIGHT_BASE;
     for (int n = 5; n <= 9; n++) weights[n] += 1; // 시작부터 살짝 우대
 
-    int has444Protect = 0;
+    int num444Protect = 0;
 
     // ★★★ 시작 화면 중앙 정렬 + Enter 대기 ★★★
     screen_clear();
     cursor_hide();
-    print_centered(3, "======== 3x4 슬롯머신 ========");
-    print_centered(5, "- Enter: 스핀 / s: 상점 / q: 종료");
-    print_centered(7, "- 라인 점수: (숫자 × 라인길이)");
-    print_centered(9, "- 444: 기본 라운드 0점 (부적 있으면 무효 & 12점/빙고)");
-    print_centered(11, "- 777: 라인 k개면 2^k 배율");
-    print_centered(13, "시작하려면 Enter를 누르세요 (q: 종료)");
+
+    print_centered(5, "======== 3x4 슬롯머신 ========");
+    print_centered(8, "+---------------------+");
+    print_centered(9, "|     WELCOME  TO     |");
+    print_centered(10, "|      SLOT GAME      |");
+    print_centered(11, "+---------------------+");
+    print_centered(14, "- 라인 점수: (숫자 × 라인길이)");
+    print_centered(15, "- 444: 해당 라운드 0점획득");
+    print_centered(16, "- 777: 라인 k개면 2^k 배율 적용");
+    print_centered(18, "시작하려면 Enter를 누르세요");
+	print_centered(19, "(q: 종료)");  
     cursor_show();
     int ch = getchar();
     if (ch == 'q' || ch == 'Q') return 0;
     if (ch != '\n') while (getchar() != '\n'); // 나머지 버퍼 비우기
+
+    screen_clear();
 
     while (spins > 0) {
         char info[100];
@@ -719,7 +760,7 @@ int main(void) {
 
         int peek = getchar();
         if (peek == 's' || peek == 'S') {
-            shop_menu(&score, &spins, weights, &has444Protect);
+            shop_menu(&score, &spins, weights, &num444Protect);
             continue;
         }
         else if (peek == 'q' || peek == 'Q') {
@@ -753,16 +794,16 @@ int main(void) {
 
         // 444 처리
         if (c444 > 0) {
-            if (has444Protect) {
+            if (num444Protect) {
                 int add444 = 12 * c444;
                 round_base += add444;
-                has444Protect = 0;
+                num444Protect--;
                 {
                     int termR, termC;
                     get_terminal_size(&termR, &termC);
 
                     char msg[128];
-                    sprintf(msg, "444 보호 부적 발동! 444 %d개 → +%d 점", c444, add444);
+                    sprintf(msg, "444 보호 부적 발동! 남은 부적 %d개 → +%d 점", num444Protect, add444);
 
                     int len = strlen(msg);
                     int row = termR / 2;       // 화면 중앙
