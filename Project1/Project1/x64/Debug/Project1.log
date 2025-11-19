@@ -1,0 +1,6 @@
+﻿  FileName.c
+C:\Users\usercom\source\repos\Project1\Project1\FileName.c(767,31): warning C4267: '초기화 중': 'size_t'에서 'int'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+C:\Users\usercom\source\repos\Project1\Project1\FileName.c(777,59): warning C4267: '초기화 중': 'size_t'에서 'int'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+C:\Users\usercom\source\repos\Project1\Project1\FileName.c(793,31): warning C4267: '초기화 중': 'size_t'에서 'int'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+C:\Users\usercom\source\repos\Project1\Project1\FileName.c(822,27): warning C4267: '초기화 중': 'size_t'에서 'int'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+  Project1.vcxproj -> C:\Users\usercom\source\repos\Project1\x64\Debug\Project1.exe
