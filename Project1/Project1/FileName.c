@@ -66,6 +66,7 @@ int g_msg_row = 1;
 #define ANSI_SHOW    "\x1b[?25h"
 #define ANSI_CLEAR   "\x1b[2J"
 #define ANSI_HOME    "\x1b[H"
+#define ANSI_BLUE_   "\x1b[38;5;67m"
 
 static void get_terminal_size(int* rows, int* cols);
 
@@ -73,10 +74,10 @@ void gotoxyflash_hit_lines(int row, int col)
 {
     const char* msg = "시작하려면 Enter를 누르세요";
 
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 10; i++) {
         if (i % 2 == 0) {
             gotoxy(row, col);
-            printf(ANSI_YELLOW "%s" ANSI_RESET, msg);
+            printf(ANSI_BLUE_ "%s" ANSI_RESET, msg);
         }
         else {
             gotoxy(row, col);
@@ -91,7 +92,7 @@ void gotoxyflash_hit_lines(int row, int col)
     }
 
     gotoxy(row, col);
-    printf(ANSI_YELLOW "%s" ANSI_RESET, msg);
+    printf(ANSI_BLUE_ "%s" ANSI_RESET, msg);
 }
 
 
@@ -743,8 +744,18 @@ int main(void) {
     print_centered(14, "- 라인 점수: (숫자 × 라인길이)");
     print_centered(15, "- 444: 해당 라운드 0점획득");
     print_centered(16, "- 777: 라인 k개면 2^k 배율 적용");
-    print_centered(18, "시작하려면 Enter를 누르세요");
-	print_centered(19, "(q: 종료)");  
+    print_centered(19, "(q: 종료)");
+
+    // 터미널 가로 크기 얻어서 "시작하려면..." 문자열의 시작열을 계산
+    int termR, termC;
+    get_terminal_size(&termR, &termC);
+
+    int x = (termC - (int)strlen("시작하려면 Enter를 누르세요")) / 2;
+    if (x < 1) x = 1;
+
+    // 깜빡이는 출력 (행:18, 열:x)
+    gotoxyflash_hit_lines(18, x);
+
     cursor_show();
     int ch = getchar();
     if (ch == 'q' || ch == 'Q') return 0;
