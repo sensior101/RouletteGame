@@ -24,9 +24,9 @@ static void gotoxy(int r, int c);
 #define WEIGHT_BASE 1
 
 // ── 상점/아이템 비용 및 가중치 증가값 ──
-#define COST_SPIN_PLUS1 5        // 스핀 +1 가격
-#define COST_BOOST_1_4 20        // 1~4 확률 업 가격
-#define COST_BOOST_5_9 40        // 5~9 확률 업 가격
+#define COST_SPIN_PLUS1 30        // 스핀 +1 가격
+#define COST_BOOST_1_4 10        // 1~4 확률 업 가격
+#define COST_BOOST_5_9 20        // 5~9 확률 업 가격
 #define COST_444_PROTECT 15       // 444 보호 부적 가격
 
 #define BIAS_INC_LOW 5           // 1~4 가중치 증가량
@@ -483,7 +483,7 @@ static void show_weights(const int* w) {
 
 static void shop_menu(int* score, int* spins, int* weights, int* num444Protect) {
     // 현재 가격을 유지하도록 static 변수 사용 (프로그램 실행 중 값 유지)
-    static int cur_cost_spin_plus1 = COST_SPIN_PLUS1; // 5 -> 다음엔 +5 증가
+    static int cur_cost_spin_plus1 = COST_SPIN_PLUS1; // 50 -> 다음엔 +50 증가
     static int cur_cost_boost_1_4 = COST_BOOST_1_4;  // 20 -> 구매시 *2
     static int cur_cost_boost_5_9 = COST_BOOST_5_9;  // 40 -> 구매시 *2
     // 444 보호 부적은 고정 가격(15)
