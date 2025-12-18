@@ -1,75 +1,63 @@
-﻿// slot_3x4_integrated_fx.c
-// gcc slot_3x4_integrated_fx.c -o slot && ./slot
-#define _CRT_SECURE_NO_WARNINGS
+﻿#define _CRT_SECURE_NO_WARNINGS
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
 #include <mmsystem.h>
+#include <stdarg.h>
+
 #pragma comment(lib, "winmm.lib")
-#include <stdarg.h>   // ★ 가변 인자(va_list) 쓰기 위해 필요
 
-static void cursor_hide(void);
-static void cursor_show(void);
-static void screen_clear(void);
-static void gotoxy(int r, int c);
-
+// 게임 설정
 #define ROWS 3
 #define COLS 4
-
 #define START_SPINS 10
 #define MIN_NUM 1
 #define MAX_NUM 9
 #define WEIGHT_BASE 1
 
-// ── 상점/아이템 비용 및 가중치 증가값 ──
-#define COST_SPIN_PLUS1 30        // 스핀 +1 가격
-#define COST_BOOST_1_4 10        // 1~4 확률 업 가격
-#define COST_BOOST_5_9 20        // 5~9 확률 업 가격
-#define COST_444_PROTECT 15       // 444 보호 부적 가격
+// 상점 및 아이템 설정
+#define COST_SPIN_PLUS1 30
+#define COST_BOOST_1_4 10
+#define COST_BOOST_5_9 20
+#define COST_444_PROTECT 15
 
-#define BIAS_INC_LOW 5           // 1~4 가중치 증가량
-#define BIAS_INC_HIGH 10         // 5~9 가중치 증가량
+#define BIAS_INC_LOW 5
+#define BIAS_INC_HIGH 10
 
-// ── 랭킹 파일 ──
+// 시스템 및 데이터 설정
 #define RANK_FILE "rankings.csv"
 #define MAX_RANK_ROWS 1000
 
-// 애니메이션 속도 조절용 (원하면 상점에서 바꿔도 가능)
-int SPIN_FRAMES = 30;   // 회전 프레임 수 (많을수록 오래 돎)
-int SPIN_DELAY_MS = 70; // 프레임 간 딜레이(ms) (클수록 느림)
-
-// 각 스핀에서 당첨 메시지를 찍을 시작 줄 (원하면 숫자 조절 가능)
-int g_msg_row = 1;
-
-// ===== 콘솔 UI(중앙 정렬/커서/색/크기) =====
-#if defined(_WIN32)
-#include <conio.h>
-#else
-#include <sys/ioctl.h>
-#include <unistd.h>
-#include <termios.h>
-#endif
-
+// ANSI 이스케이프 시퀀스
 #define ANSI_RESET   "\x1b[0m"
 #define ANSI_BOLD    "\x1b[1m"
-#define ANSI_DIM     "\x1b[2m"
 #define ANSI_RED     "\x1b[31m"
-#define ANSI_GREEN   "\x1b[32m"
-#define ANSI_YELLOW  "\x1b[33m"
-#define ANSI_BLUE    "\x1b[34m"
-#define ANSI_MAGENTA "\x1b[35m"
-#define ANSI_CYAN    "\x1b[36m"
+#define ANSI_ORANGE   "\x1b[38;5;214m"
+#define ANSI_MAGENTA  "\x1b[35m"
+#define ANSI_YELLOW    "\x1b[1;33m"
 #define ANSI_WHITE   "\x1b[37m"
 #define ANSI_HIDE    "\x1b[?25l"
 #define ANSI_SHOW    "\x1b[?25h"
 #define ANSI_CLEAR   "\x1b[2J"
 #define ANSI_HOME    "\x1b[H"
-#define ANSI_BLUE_   "\x1b[38;5;67m"
 
+// 전역 변수 및 상태
+int SPIN_FRAMES = 30;
+int SPIN_DELAY_MS = 70;
+int g_msg_row = 1;
+
+// 함수 프로토타입
+static void cursor_hide(void);
+static void cursor_show(void);
+static void screen_clear(void);
+static void gotoxy(int r, int c);
 static void get_terminal_size(int* rows, int* cols);
 
+
+
+// "시작하려면 Enter를 누르세요" 문구 깜빡이기
 void gotoxyflash_hit_lines(int row, int col)
 {
     const char* msg = "시작하려면 Enter를 누르세요";
@@ -77,7 +65,7 @@ void gotoxyflash_hit_lines(int row, int col)
     for (int i = 0; i < 10; i++) {
         if (i % 2 == 0) {
             gotoxy(row, col);
-            printf(ANSI_BLUE_ "%s" ANSI_RESET, msg);
+            printf(ANSI_ORANGE "%s" ANSI_RESET, msg);
         }
         else {
             gotoxy(row, col);
@@ -92,10 +80,11 @@ void gotoxyflash_hit_lines(int row, int col)
     }
 
     gotoxy(row, col);
-    printf(ANSI_BLUE_ "%s" ANSI_RESET, msg);
+    printf(ANSI_ORANGE "%s" ANSI_RESET, msg);
 }
 
 
+// 콘솔 제어
 static void get_terminal_size(int* rows, int* cols) {
 #if defined(_WIN32)
     CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -123,7 +112,7 @@ static void screen_clear(void) { fputs(ANSI_CLEAR ANSI_HOME, stdout); }
 static void cursor_hide(void) { fputs(ANSI_HIDE, stdout); }
 static void cursor_show(void) { fputs(ANSI_SHOW, stdout); }
 
-// 콘솔 화면 가로 중앙 정렬로 문자열 출력
+// 콘솔 화면 가운데 정렬
 static void print_centered(int row, const char* text) {
     int termR, termC;
     get_terminal_size(&termR, &termC);
@@ -134,7 +123,7 @@ static void print_centered(int row, const char* text) {
     printf("%s", text);
 }
 
-// 포맷 문자열을 중앙에 출력하고, 다음 줄로 내려가도록 관리
+// 가변 인자 받아서 가운데 정렬 메시지 출력
 static void log_centered_msg(const char* fmt, ...) {
     char buf[128];
 
@@ -144,11 +133,11 @@ static void log_centered_msg(const char* fmt, ...) {
     va_end(ap);
 
     print_centered(g_msg_row, buf);
-    g_msg_row++;   // 다음 메시지는 한 줄 아래에 찍히도록
+    g_msg_row++;
 }
 
 
-// ===== 사운드(효과음) =====
+// 사운드 이팩트
 #if defined(_WIN32)
 static void sfx_spin_start(void) { Beep(880, 60); Beep(1175, 60); }
 static void sfx_line_win(void) { Beep(1319, 80); Beep(1568, 90); }
@@ -161,15 +150,15 @@ static void sfx_big_win(void) { printf("\a\a"); fflush(stdout); }
 static void sfx_lose_round(void) { /* no-op */ }
 #endif
 
-// ===== 확률/라인 유틸 (STICKY & GIMME) =====
-#define STICKY_H 35         // [%] 가로로 이전 칸 복사 확률
-#define STICKY_V 20         // [%] 세로로 위 칸 복사 확률
-#define GIMME_LINE_PROB 18  // [%] 한 스핀에 '보장 라인' 1개 만들 확률
+// 확률 및 상수
+#define STICKY_H 35 
+#define STICKY_V 20
+#define GIMME_LINE_PROB 18 
 
 static inline int roll100(void) { return rand() % 100; }
 
-typedef struct { int len; int r[4]; int c[4]; } Line;     // 라인 좌표
-typedef struct { char name[20]; Line L; } NamedLine;      // (옵션) 이름 포함
+typedef struct { int len; int r[4]; int c[4]; } Line;
+typedef struct { char name[20]; Line L; } NamedLine;
 
 // 모든 라인(가로3, 세로4, 대각4=총11) 구성
 static void build_all_lines(Line L[11]) {
@@ -183,7 +172,7 @@ static void build_all_lines(Line L[11]) {
     L[k++] = d1; L[k++] = d2; L[k++] = d3; L[k++] = d4;
 }
 
-// ===== 유틸 =====
+// 유틸
 static int rand_range(int a, int b) { return a + rand() % (b - a + 1); }
 
 // weights[1]~weights[9] 사용해서 숫자 뽑기
@@ -194,15 +183,14 @@ static int pick_number_by_weights(const int* weights) {
     return 9;
 }
 
+// '엔터 눌러 다음' 대기
 static void wait_enter(void) {
     int ch;
     int termR, termC;
     get_terminal_size(&termR, &termC);
 
     print_centered(5, "Enter: 스핀  |  s: 상점  |  q: 종료");
-
-    // ---- 입력 위치를 중앙으로 배치 ----
-    gotoxy(6, termC / 2);   // ← 여기를 중앙으로
+    gotoxy(6, termC / 2);
 
     ch = getchar();
     if (ch == '\n') { return; }
@@ -213,13 +201,13 @@ static void wait_enter(void) {
     while (ch != '\n' && ch != EOF) ch = getchar();
 }
 
-// 결과 화면에서 '엔터 눌러 넘어가기' 전용 (완전 중앙정렬)
+// 결과 화면에서 '엔터 눌러 넘어가기' 전용
 static void wait_result_enter(void) {
     int termR, termC;
     get_terminal_size(&termR, &termC);
 
     const char* msg = "계속하려면 Enter를 누르세요...";
-    int row = termR / 2 + 8;   // 보드 아래쪽 자연스럽게 위치 (원하면 수정)
+    int row = termR / 2 + 8;
 
     print_centered(row, msg);
 
@@ -230,16 +218,14 @@ static void wait_result_enter(void) {
 }
 
 
-// 디버그/라인 메시지용 일시 정지 (완전 중앙정렬)
+// 디버그/라인 메시지용 일시 정지
 static void wait_log_enter(void) {
     int termR, termC;
     get_terminal_size(&termR, &termC);
 
     const char* msg = "(Enter를 누르면 계속 진행합니다...)";
 
-    // 보드 아래 자연스러운 위치 (원하면 조정 가능)
     int row = termR / 2 + 10;
-
     print_centered(row, msg);
 
     int ch;
@@ -251,7 +237,7 @@ static void wait_log_enter(void) {
 
 
 
-// ===== 보드 출력(중앙 정렬) =====
+// 보드 출력
 static int board_text_width(void) { return 1 + 1 + (COLS * 1) + (COLS - 1) * 3 + 1; } // "│ " + n + " | " + " │"
 static int board_text_height(void) { return 1 + ROWS + (ROWS - 1) + 1; }          // top + rows + h-lines + bottom
 
@@ -270,9 +256,8 @@ static void print_board_centered(int b[ROWS][COLS], int top_row, int left_col) {
     gotoxy(r0 + (1 + (ROWS - 1) * 2) + 1, c0); puts("└───────────────┘");
 }
 
-// ===== 보드 생성(STICKY + GIMME) =====
+// 보드 생성
 static void generate_board(int board[ROWS][COLS], int weights[10]) {
-    // 1) STICKY 기반 채우기
     for (int r = 0; r < ROWS; r++) {
         for (int c = 0; c < COLS; c++) {
             int num;
@@ -288,18 +273,17 @@ static void generate_board(int board[ROWS][COLS], int weights[10]) {
             board[r][c] = num;
         }
     }
-    // 2) 낮은 확률로 보장 라인 1개 심기(444 회피)
     if (roll100() < GIMME_LINE_PROB) {
         Line lines[11]; build_all_lines(lines);
         int pick = rand_range(0, 10);
         int lucky = rand_range(1, 9);
-        if (lucky == 4) lucky = 5; // 444 라운드 무효 회피
+        if (lucky == 4) lucky = 5;
         Line L = lines[pick];
         for (int i = 0; i < L.len; i++) board[L.r[i]][L.c[i]] = lucky;
     }
 }
 
-// ===== 애니메이션: 스핀 프레임 =====
+// 보드 스핀 애니메이션
 static void spin_animation_frames(int board[ROWS][COLS], int weights[10], int frames, int delay_ms) {
     int termR, termC; get_terminal_size(&termR, &termC);
     int BW = board_text_width(), BH = board_text_height();
@@ -317,7 +301,7 @@ static void spin_animation_frames(int board[ROWS][COLS], int weights[10], int fr
         }
         screen_clear(); cursor_hide();
         print_centered(2, " 스핀 중... ");
-        printf(ANSI_CYAN ANSI_BOLD);
+        printf(ANSI_YELLOW ANSI_BOLD);
         print_board_centered(temp, top, left);
         printf(ANSI_RESET);
         cursor_show();
@@ -329,13 +313,13 @@ static void spin_animation_frames(int board[ROWS][COLS], int weights[10], int fr
     }
     screen_clear(); cursor_hide();
     print_centered(2, " 스핀 결과 ");
-    printf(ANSI_CYAN ANSI_BOLD);
+    printf(ANSI_YELLOW ANSI_BOLD);
     print_board_centered(board, top, left);
     printf(ANSI_RESET);
     cursor_show();
 }
 
-// ===== 채점/라인 판정 =====
+// 당첨 라인 채점
 static int all_equal_arr(const int* a, int len) {
     for (int i = 1; i < len; i++) if (a[i] != a[0]) return 0;
     return 1;
@@ -413,7 +397,7 @@ static int score_lines(int b[ROWS][COLS], int verbose, int* out_count777, int* o
     return gained;
 }
 
-// ===== 당첨 라인 깜빡이기(하이라이트) =====
+// 당첨 라인 깜빡이기
 typedef struct { int len; int r[4]; int c[4]; int value; } HitLine;
 
 static int collect_hit_lines(int b[ROWS][COLS], HitLine out[], int maxn) {
@@ -432,49 +416,70 @@ static int collect_hit_lines(int b[ROWS][COLS], HitLine out[], int maxn) {
     return k;
 }
 
-static void flash_hit_lines(int b[ROWS][COLS], int times, int delay_ms) {
-    HitLine hits[16]; int n = collect_hit_lines(b, hits, 16);
+// 당첨 라인 하나씩 순차적으로 보여주기
+static void sfx_sequential_win(int step) {
+    int base_freq = 600 + (step * 300);
+    Beep(base_freq, 60);
+    Beep(base_freq * 1.25, 60);
+    Beep(base_freq * 1.5, 80);
+}
+
+static void flash_hit_lines(int b[ROWS][COLS], int delay_ms) {
+    HitLine hits[16];
+    int n = collect_hit_lines(b, hits, 16);
     if (n == 0) return;
 
-    int termR, termC; get_terminal_size(&termR, &termC);
+    const char* ordinal_names[] = {
+    "ZERO", "ONE", "TWO", "THREE", "FOUR", "FIVE",
+    "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "MAX"
+    };
+
+    int termR, termC;
+    get_terminal_size(&termR, &termC);
     int BW = board_text_width(), BH = board_text_height();
     int top = (termR - BH) / 2; if (top < 1) top = 1;
     int left = (termC - BW) / 2; if (left < 1) left = 1;
 
-    for (int t = 0; t < times; t++) {
-        // 컬러 on
-        screen_clear(); cursor_hide();
-        print_board_centered(b, top, left);
-        for (int i = 0; i < n; i++) {
-            const char* col = (hits[i].value == 7) ? ANSI_YELLOW : ANSI_GREEN;
-            for (int j = 0; j < hits[i].len; j++) {
-                int rr = hits[i].r[j], cc = hits[i].c[j];
-                int row = top + 1 + rr * 2;
-                int colx = left + 2 + cc * 4;
-                gotoxy(row, colx);
-                printf("%s%d%s", col, b[rr][cc], ANSI_RESET);
-            }
-        }
-        cursor_show();
-#if defined(_WIN32)
-        Sleep(delay_ms);
-#else
-        usleep(delay_ms * 1000);
-#endif
+    for (int i = 0; i < n; i++) {
+        screen_clear();
+        cursor_hide();
 
-        // 컬러 off
-        screen_clear(); cursor_hide();
+        int bingo_count = i + 1;
+        const char* bingo_text = (bingo_count <= 10) ? ordinal_names[bingo_count] : "MEGA";
+
+        gotoxy(top - 2, left - 2);
+        printf(ANSI_ORANGE "  ★ %s BINGO!! ★" ANSI_RESET, bingo_text);
+
         print_board_centered(b, top, left);
+
+        const char* col = (hits[i].value == 7) ? ANSI_MAGENTA : ANSI_ORANGE;
+        for (int j = 0; j < hits[i].len; j++) {
+            int rr = hits[i].r[j], cc = hits[i].c[j];
+            int row = top + 1 + rr * 2;
+            int colx = left + 2 + cc * 4;
+            gotoxy(row, colx);
+            printf("%s%d%s", col, b[rr][cc], ANSI_RESET);
+        }
+        sfx_sequential_win(i);
+
         cursor_show();
-#if defined(_WIN32)
-        Sleep(delay_ms);
-#else
-        usleep(delay_ms * 1000);
-#endif
+        Sleep(delay_ms + 200);
     }
+
+    screen_clear();
+    print_board_centered(b, top, left);
+    for (int i = 0; i < n; i++) {
+        const char* col = (hits[i].value == 7) ? ANSI_MAGENTA : ANSI_ORANGE;
+        for (int j = 0; j < hits[i].len; j++) {
+            int rr = hits[i].r[j], cc = hits[i].c[j];
+            gotoxy(top + 1 + rr * 2, left + 2 + cc * 4);
+            printf("%s%d%s", col, b[rr][cc], ANSI_RESET);
+        }
+    }
+    Sleep(300);
 }
 
-// ===== 상점 =====
+// 상점
 static void show_weights(const int* w) {
     printf("현재 가중치(1~9): ");
     for (int n = MIN_NUM; n <= MAX_NUM; n++) printf("%d:%d ", n, w[n]);
@@ -482,11 +487,10 @@ static void show_weights(const int* w) {
 }
 
 static void shop_menu(int* score, int* spins, int* weights, int* num444Protect) {
-    // 현재 가격을 유지하도록 static 변수 사용 (프로그램 실행 중 값 유지)
     static int cur_cost_spin_plus1 = COST_SPIN_PLUS1; // 50 -> 다음엔 +50 증가
     static int cur_cost_boost_1_4 = COST_BOOST_1_4;  // 20 -> 구매시 *2
     static int cur_cost_boost_5_9 = COST_BOOST_5_9;  // 40 -> 구매시 *2
-    // 444 보호 부적은 고정 가격(15)
+    // 444 보호 부적은 고정 가격
     const int fixed_cost_444 = COST_444_PROTECT;
 
     while (1) {
@@ -496,7 +500,6 @@ static void shop_menu(int* score, int* spins, int* weights, int* num444Protect) 
         int termR, termC;
         get_terminal_size(&termR, &termC);
 
-        // 상점을 화면 중앙 근처에 배치할 기준 줄
         int base = termR / 2 - 7;
         if (base < 1) base = 1;
 
@@ -521,7 +524,7 @@ static void shop_menu(int* score, int* spins, int* weights, int* num444Protect) 
 
         print_centered(base + 8, "0) 나가기");
 
-        // 가중치 정보도 중앙에
+
         char wbuf[256] = { 0 };
         char tmp[32];
         strcpy(wbuf, "현재 가중치(1~9): ");
@@ -533,14 +536,14 @@ static void shop_menu(int* score, int* spins, int* weights, int* num444Protect) 
         print_centered(base + 12, "선택을 입력하고 Enter를 누르세요.");
 
         cursor_show();
-        gotoxy(base + 13, termC / 2 - 3);  // 입력 커서를 중앙 근처로
+        gotoxy(base + 13, termC / 2 - 3);
 
         int sel;
         if (scanf("%d", &sel) != 1) {
             while (getchar() != '\n');
             continue;
         }
-        while (getchar() != '\n');  // 버퍼 정리
+        while (getchar() != '\n');
 
         if (sel == 0) {
             // 상점 종료 → 화면 지우고 메인으로 복귀
@@ -601,14 +604,13 @@ static void shop_menu(int* score, int* spins, int* weights, int* num444Protect) 
             print_centered(base + 15, "잘못된 선택입니다. 0~4 중에서 선택하세요.");
         }
 
-        // 상점 내에서 메시지 한 번 보고 넘어가고 싶으면 잠깐 대기
         print_centered(base + 22, "계속하려면 Enter를 누르세요...");
         int ch2;
         do { ch2 = getchar(); } while (ch2 != '\n' && ch2 != EOF);
     }
 }
 
-// ===== 랭킹 =====
+// 랭킹 저장 및 출력
 typedef struct { char name[64]; int score; char when[32]; } RankRow;
 
 static void save_ranking(const char* name, int score) {
@@ -678,7 +680,7 @@ static void show_top10(void) {
 
     qsort(arr, n, sizeof(RankRow), cmp_desc);
 
-    // ===== 중앙정렬 출력 시작 =====
+
     screen_clear();
     cursor_hide();
 
@@ -710,29 +712,29 @@ static void show_top10(void) {
 }
 
 
-// ===== 메인 =====
+// 메인 게임 루프
 int main(void) {
     srand((unsigned)time(NULL));
-    enable_vt_mode(); // 윈도우 ANSI 켜기
+    enable_vt_mode();
 
     char path[MAX_PATH];
     GetModuleFileNameA(NULL, path, MAX_PATH);
     char* p = strrchr(path, '\\');
     if (p) *(p + 1) = '\0';
     strcat(path, "bgm.wav");
-    
+
     PlaySoundA(path, NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
-    
+
     int board[ROWS][COLS];
     int spins = START_SPINS;
     int score = 0;
-    int weights[10]; // 1~9 사용, 0은 미사용
+    int weights[10];
     for (int n = 0; n < 10; n++) weights[n] = WEIGHT_BASE;
-    for (int n = 5; n <= 9; n++) weights[n] += 1; // 시작부터 살짝 우대
+    for (int n = 5; n <= 9; n++) weights[n] += 1;
 
     int num444Protect = 0;
 
-    // ★★★ 시작 화면 중앙 정렬 + Enter 대기 ★★★
+    // 시작 화면
     screen_clear();
     cursor_hide();
 
@@ -746,27 +748,25 @@ int main(void) {
     print_centered(16, "- 777: 라인 k개면 2^k 배율 적용");
     print_centered(19, "(q: 종료)");
 
-    // 터미널 가로 크기 얻어서 "시작하려면..." 문자열의 시작열을 계산
     int termR, termC;
     get_terminal_size(&termR, &termC);
 
     int x = (termC - (int)strlen("시작하려면 Enter를 누르세요")) / 2;
     if (x < 1) x = 1;
 
-    // 깜빡이는 출력 (행:18, 열:x)
     gotoxyflash_hit_lines(18, x);
 
     cursor_show();
     int ch = getchar();
     if (ch == 'q' || ch == 'Q') return 0;
-    if (ch != '\n') while (getchar() != '\n'); // 나머지 버퍼 비우기
+    if (ch != '\n') while (getchar() != '\n');
 
     screen_clear();
 
     while (spins > 0) {
         char info[100];
         sprintf(info, "[ 남은 스핀 %d | 점수 %d ]", spins, score);
-        print_centered(3, info);     // 화면 3번째 줄(원하면 조정 가능)
+        print_centered(3, info);
         wait_enter();
 
         int peek = getchar();
@@ -789,7 +789,7 @@ int main(void) {
         sfx_spin_start();
         spin_animation_frames(board, weights, SPIN_FRAMES, SPIN_DELAY_MS);
 
-        flash_hit_lines(board, /*times=*/2, /*delay_ms=*/120);
+        flash_hit_lines(board, 150);
         int termR, termC;
         get_terminal_size(&termR, &termC);
         int BW = board_text_width();
@@ -823,7 +823,7 @@ int main(void) {
 
                     screen_clear();
                     gotoxy(row, col);
-                    printf(ANSI_CYAN "%s" ANSI_RESET, msg);
+                    printf(ANSI_YELLOW "%s" ANSI_RESET, msg);
 
                     const char* pressMsg = "Enter를 누르면 계속";
                     int col2 = (termC - strlen(pressMsg)) / 2;
@@ -878,7 +878,7 @@ int main(void) {
 
                 screen_clear();
                 gotoxy(row, col);
-                printf(ANSI_YELLOW "%s" ANSI_RESET, msg);
+                printf(ANSI_MAGENTA "%s" ANSI_RESET, msg);
 
                 gotoxy(row + 2, (termC - 24) / 2);
                 printf("Enter를 누르면 계속");
@@ -892,23 +892,20 @@ int main(void) {
         int round_total = round_base * multiplier;
         score += round_total;
 
-        // 연출
-        if (round_total > 0) sfx_line_win();
         if (c777 > 0) sfx_big_win();
-        flash_hit_lines(board, /*times=*/2, /*delay_ms=*/120);
 
         char msg1[100], msg2[120];
         sprintf(msg1, "라인 점수 합계: %+d", gained);
         sprintf(msg2, "이 라운드 획득 점수: %d (배율 적용 후) → 현재 점수 %d", round_total, score);
-        print_centered(20, msg1);
-        print_centered(21, msg2);
+        print_centered(g_msg_row++, msg1);
+        print_centered(g_msg_row++, msg2);
 
-        if (spins == 0) {      // 이 라운드 끝나고 남은 스핀이 0이면 마지막 판
+        if (spins == 0) {
             wait_result_enter();
         }
     }
 
-    // ===== 랭킹 저장/표시 (중앙 정렬 버전) =====
+    // 랭킹 표시
     {
         screen_clear();
         int termR, termC;
@@ -916,11 +913,9 @@ int main(void) {
 
         char name[64];
 
-        // 중앙 안내 텍스트
         print_centered(termR / 2 - 3, "게임 종료!");
         print_centered(termR / 2 - 1, "이름을 입력하세요 (엔터=Player)");
 
-        // 이름 입력 위치 중앙에 커서 놓기
         gotoxy(termR / 2, termC / 2 - 8);
         if (fgets(name, sizeof(name), stdin) == NULL || name[0] == '\n') {
             strcpy(name, "Player");
@@ -943,10 +938,9 @@ int main(void) {
         save_ranking(name, score);
     }
 
-    // ===== TOP10 중앙정렬 출력 =====
     show_top10();
 
-    // ===== 마지막 인사 화면 =====
+    // 마지막 화면
     {
         PlaySound(NULL, 0, 0);
 
@@ -965,4 +959,3 @@ int main(void) {
 
 
 }
-
